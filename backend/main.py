@@ -60,6 +60,7 @@ LANG_MAP = {
     "hi": "Hindi", "ta": "Tamil", "te": "Telugu",
     "mr": "Marathi", "kn": "Kannada", "gu": "Gujarati",
     "bn": "Bengali", "pa": "Punjabi",
+"en": "English",
 }
 
 
