@@ -30,11 +30,12 @@ const LANGUAGES = [
   { code: "gu", label: "ગુજરાતી",  name: "Gujarati", flag: "🇮🇳" },
   { code: "bn", label: "বাংলা",    name: "Bengali",  flag: "🇮🇳" },
   { code: "pa", label: "ਪੰਜਾਬੀ",  name: "Punjabi",  flag: "🇮🇳" },
+  { code: "en", label: "English", name: "English", flag: "🇬🇧" },
 ];
 
 const LANG_BCP47 = {
   hi:"hi-IN", ta:"ta-IN", te:"te-IN", mr:"mr-IN",
-  kn:"kn-IN", gu:"gu-IN", bn:"bn-IN", pa:"pa-IN",
+  kn:"kn-IN", gu:"gu-IN", bn:"bn-IN", pa:"pa-IN", en: "en-IN",
 };
 
 const RISK_CFG = {
