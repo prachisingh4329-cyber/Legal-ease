@@ -553,18 +553,41 @@ export default function LegalEase() {
 
   // ── Landing ----------------------------------------------------------------
   if (screen === "landing") return (
-    <div style={S.app}>
-      <nav style={S.nav}>
-        <div style={S.logo}>⚖️ Legal-Ease</div>
-        <div style={{ display:"flex", gap:"8px", flexWrap:"wrap" }}>
-          <span style={S.badge("#059669")}>🛡️ Privacy-First</span>
-          <span style={S.badge("#1D4ED8")}>🔒 Smart Masking</span>
-          <span style={S.badge("#7C3AED")}>⚖️ Lawyer-Grade AI</span>
-          <span style={S.badge("#D97706")}>🔊 Voice Output</span>
-        </div>
-      </nav>
-
-      <div style={{ maxWidth:"1100px", margin:"0 auto", padding:"4rem 2rem" }}>
+    <div style={{
+  display: "flex",
+  gap: "10px",
+  flexWrap: "wrap",
+  alignItems: "center",
+  justifyContent: "center"
+}}>
+  {[
+    ["🛡️", "Privacy-First"],
+    ["🔒", "Smart Masking"],
+    ["⚖️", "AI Contract Analysis"],
+    ["🔊", "Voice Output"]
+  ].map(([icon, label]) => (
+    <span key={label} style={{
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: "7px",
+      padding: "9px 13px",
+      borderRadius: "25px",
+      background: "rgba(212,175,55,0.10)",
+      border: "1px solid rgba(232,202,117,0.45)",
+      color: "#F5D77A",
+      fontSize: "12px",
+      fontWeight: "600",
+      whiteSpace: "nowrap"
+    }}>
+      <span>{icon}</span>
+      <span>{label}</span>
+    </span>
+  ))}
+</div>  
+    
+   </nav>
+    <div style={{ maxWidth:"1100px", margin:"0 auto", padding:"4rem 2rem" }}>
         {/* Hero */}
         <div style={{ textAlign:"center", marginBottom:"3rem" }}>
           <div style={{ display:"inline-flex", background:"#EEF2FF", borderRadius:"30px",
