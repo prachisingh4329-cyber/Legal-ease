@@ -15,7 +15,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 
-// ── Config --------------------------------------------------------------------
+// ── Configuration --------------------------------------------------------------------
 const API_BASE = (import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000").replace(/\/$/, "");
 const API_KEY  = import.meta.env.VITE_API_KEY || "legal-ease-secret-123";
 const HEADERS  = { "X-API-Key": API_KEY };
