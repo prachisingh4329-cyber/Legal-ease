@@ -24,9 +24,8 @@ from google.genai import errors as genai_errors, types
 load_dotenv()
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "").strip()
-GOOGLE_MODEL = os.getenv("GOOGLE_MODEL", "gemini-3.8-flash").strip()
+GOOGLE_MODEL = os.getenv("GOOGLE_MODEL","gemini-3.8-flash").strip()
 SECRET_API_KEY = os.getenv("SECRET_API_KEY", "").strip()
-
 
 def get_gemini_client() -> genai.Client:
     if not GOOGLE_API_KEY:
