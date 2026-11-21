@@ -10,14 +10,14 @@
 //    - Chat assistant
 //
 //  Place this file at:  src/App.jsx
-//  Backend must be running at:  http://127.0.0.1:8000
+//  Backend URL comes from VITE_API_BASE (set it in Vercel -> Environment Variables)
 // =============================================================================
 
 import { useState, useRef, useCallback, useEffect } from "react";
 
 // ── Config --------------------------------------------------------------------
-const API_BASE = "http://127.0.0.1:8000";
-const API_KEY  = "legal-ease-secret-123";
+const API_BASE = (import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000").replace(/\/$/, "");
+const API_KEY  = import.meta.env.VITE_API_KEY || "legal-ease-secret-123";
 const HEADERS  = { "X-API-Key": API_KEY };
 
 // ── Languages ----------------------------------------------------------------
@@ -39,9 +39,9 @@ const LANG_BCP47 = {
 };
 
 const RISK_CFG = {
-  High:   { color:"#EF4444", bg:"#FEF2F2", border:"#FECACA", dark:"#DC2626" },
-  Medium: { color:"#F59E0B", bg:"#FFFBEB", border:"#FDE68A", dark:"#D97706" },
-  Low:    { color:"#22C55E", bg:"#F0FDF4", border:"#A7F3D0", dark:"#059669" },
+  High:   { color:"#EF4444", bg:"rgba(239,68,68,0.12)", border:"rgba(239,68,68,0.4)", dark:"#FCA5A5" },
+  Medium: { color:"#F59E0B", bg:"rgba(245,158,11,0.12)", border:"rgba(245,158,11,0.4)", dark:"#FCD34D" },
+  Low:    { color:"#22C55E", bg:"rgba(34,197,94,0.12)", border:"rgba(34,197,94,0.4)", dark:"#6EE7B7" },
 };
 
 // ── Smart Masking (Layer 1 — runs entirely in browser) -----------------------
@@ -50,19 +50,21 @@ function buildMasker() {
 
   function mask(text) {
     let t = text;
+    const STOP = /^(This|The|That|These|Those|Service|Flat|Plot|House|Door|Account|Only|Client|Company|Freelancer|Contractor|Provider|Agreement|Party|Parties|Technologies|Pvt)\b/;
     const patterns = [
-      { re: /\b[A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b/g,               tag: "NAME" },
-      { re: /\b\d{10}\b/g,                                                     tag: "PHONE" },
-      { re: /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g,             tag: "EMAIL" },
-      { re: /\b[A-Z][a-zA-Z\s]+(?:Pvt\.?\s*Ltd\.?|LLC|Inc\.?|Corp\.?|LLP|Company)\b/g, tag: "COMPANY" },
-      { re: /\b(?:GSTIN|PAN|Aadhaar|CIN)\s*[:\-]?\s*[A-Z0-9]{8,}\b/gi,       tag: "ID" },
+      { re: /\b(?:GSTIN|PAN|Aadhaar|CIN)\s*[:\-]?\s*[A-Z0-9]{8,}\b/gi,        tag: "ID" },
       { re: /\b(?:Account|A\/C)\s*(?:No\.?)?\s*:?\s*[\dX]{8,}\b/gi,           tag: "BANK" },
+      { re: /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g,              tag: "EMAIL" },
+      { re: /\b\d{10}\b/g,                                                    tag: "PHONE" },
       { re: /\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b/g, tag: "DATE" },
-      { re: /\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/g,                        tag: "DATE" },
-      { re: /\b(?:Plot|Flat|House|Door)\s*No\.?\s*[\d\-]+[,\s]+[A-Z][a-zA-Z\s,]+\b/g, tag: "ADDRESS" },
+      { re: /\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/g,                         tag: "DATE" },
+      { re: /\b(?:[A-Z][A-Za-z&.]*[ \t]+){1,4}(?:Pvt\.?[ \t]*Ltd\.?|Private[ \t]+Limited|Limited|LLC|Inc\.?|Corp\.?|LLP)(?![A-Za-z])/g, tag: "COMPANY" },
+      { re: /\b(?:Plot|Flat|House|Door)[ \t]*No\.?[ \t]*[\d\-]+(?:,[ \t]*[A-Z][A-Za-z0-9 ]{1,30}){1,3}/g, tag: "ADDRESS" },
+      { re: /\b[A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b/g,                 tag: "NAME" },
     ];
     patterns.forEach(({ re, tag }) => {
       t = t.replace(re, (m) => {
+        if (tag === "NAME" && STOP.test(m)) return m;
         const ex = Object.entries(map).find(([, v]) => v === m);
         if (ex) return ex[0];
         cnt[tag] = (cnt[tag] || 0) + 1;
@@ -112,10 +114,17 @@ const stopSpeak = () => window.speechSynthesis?.cancel();
 
 // ── Backend calls ------------------------------------------------------------
 async function apiFetch(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: { ...HEADERS, ...options.headers },
-  });
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: { ...HEADERS, ...options.headers },
+    });
+  } catch {
+    throw new Error(
+      `Cannot reach the server (${API_BASE}). If the backend is on Render's free plan it may be waking up - wait about a minute and try again.`
+    );
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
     throw new Error(err.detail || "Request failed");
@@ -244,14 +253,14 @@ function DonutChart({ high, medium, low }) {
   });
 
   return (
-    <div style={{ background:"white", borderRadius:"18px", border:"1px solid #E5E7EB",
+    <div style={{ background:"#0F2A20", borderRadius:"18px", border:"1px solid rgba(212,175,55,0.25)",
       padding:"1.5rem", boxShadow:"0 4px 16px rgba(0,0,0,0.08)",
       display:"flex", flexDirection:"column", alignItems:"center" }}>
-      <div style={{ fontWeight:"700", fontSize:"17px", color:"#111827",
+      <div style={{ fontWeight:"700", fontSize:"17px", color:"#F5F0DF",
         alignSelf:"flex-start", marginBottom:"1.25rem" }}>Risk Distribution</div>
 
       <svg width="220" height="220" viewBox="0 0 220 220">
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#F0F0F0" strokeWidth={sw} />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.10)" strokeWidth={sw} />
         {total > 0
           ? arcs.map((arc,i) => arc.dash > 2 && (
             <circle key={i} cx={cx} cy={cy} r={r} fill="none"
@@ -261,17 +270,17 @@ function DonutChart({ high, medium, low }) {
               transform={`rotate(-90 ${cx} ${cy})`}
               style={{ transition:"all 0.7s cubic-bezier(0.4,0,0.2,1)" }} />
           ))
-          : <circle cx={cx} cy={cy} r={r} fill="none" stroke="#E5E7EB" strokeWidth={sw} />
+          : <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(212,175,55,0.25)" strokeWidth={sw} />
         }
-        <text x={cx} y={cy-6} textAnchor="middle" fontSize="38" fontWeight="900" fill="#111827">{risky}</text>
-        <text x={cx} y={cy+16} textAnchor="middle" fontSize="10.5" fill="#9CA3AF" fontWeight="600" letterSpacing="0.8">
+        <text x={cx} y={cy-6} textAnchor="middle" fontSize="38" fontWeight="900" fill="#F5F0DF">{risky}</text>
+        <text x={cx} y={cy+16} textAnchor="middle" fontSize="10.5" fill="#9FB0A6" fontWeight="600" letterSpacing="0.8">
           RISKY CLAUSES FOUND
         </text>
       </svg>
 
       <div style={{ display:"flex", flexWrap:"wrap", justifyContent:"center", gap:"8px 16px", margin:"4px 0 1.25rem" }}>
         {segs.map(s => (
-          <span key={s.label} style={{ display:"flex", alignItems:"center", gap:"6px", fontSize:"13px", color:"#374151", fontWeight:"500" }}>
+          <span key={s.label} style={{ display:"flex", alignItems:"center", gap:"6px", fontSize:"13px", color:"#E2E8E3", fontWeight:"500" }}>
             <span style={{ width:"11px", height:"11px", borderRadius:"3px", background:s.color, display:"inline-block" }} />
             {s.label}
           </span>
@@ -279,19 +288,19 @@ function DonutChart({ high, medium, low }) {
       </div>
 
       <div style={{ display:"flex", width:"100%", justifyContent:"space-around",
-        paddingTop:"0.875rem", borderTop:"1px solid #F3F4F6" }}>
+        paddingTop:"0.875rem", borderTop:"1px solid rgba(255,255,255,0.08)" }}>
         {segs.map(s => (
           <div key={s.label} style={{ textAlign:"center" }}>
             <div style={{ fontSize:"24px", fontWeight:"900", color:s.color, lineHeight:1 }}>{s.count}</div>
-            <div style={{ fontSize:"11px", color:"#9CA3AF", marginTop:"4px" }}>{s.label.split(" ")[0]}</div>
+            <div style={{ fontSize:"11px", color:"#9FB0A6", marginTop:"4px" }}>{s.label.split(" ")[0]}</div>
           </div>
         ))}
       </div>
 
       <div style={{ marginTop:"1rem", width:"100%", padding:"10px 14px", borderRadius:"10px",
         textAlign:"center", boxSizing:"border-box",
-        background: high>0?"#FEF2F2": medium>0?"#FFFBEB":"#F0FDF4",
-        border:`1px solid ${high>0?"#FECACA":medium>0?"#FDE68A":"#A7F3D0"}`,
+        background: high>0?"rgba(239,68,68,0.12)": medium>0?"rgba(245,158,11,0.12)":"rgba(34,197,94,0.12)",
+        border:`1px solid ${high>0?"rgba(239,68,68,0.4)":medium>0?"rgba(245,158,11,0.4)":"rgba(34,197,94,0.4)"}`,
         fontSize:"13px", fontWeight:"700",
         color: high>0?"#DC2626":medium>0?"#D97706":"#059669" }}>
         {high>0
@@ -469,11 +478,12 @@ const S = {
     background: "rgba(5,24,18,0.96)",
     backdropFilter: "blur(12px)",
     borderBottom: "1px solid rgba(212,175,55,0.3)",
-    padding: "0 2rem",
+    padding: "8px clamp(1rem, 4vw, 2rem)",
+    gap: "12px",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    height: "64px",
+    minHeight: "64px",
     position: "sticky",
     top: 0,
     zIndex: 100
@@ -554,56 +564,39 @@ const S = {
 
   // ── Landing ----------------------------------------------------------------
   if (screen === "landing") return (
-    <div style={{
-  display: "flex",
-  gap: "10px",
-  flexWrap: "wrap",
-  alignItems: "center",
-  justifyContent: "center"
-}}>
-  {[
-    ["🛡️", "Privacy-First"],
-    ["🔒", "Smart Masking"],
-    ["⚖️", "AI Contract Analysis"],
-    ["🔊", "Voice Output"]
-  ].map(([icon, label]) => (
-    <span key={label} style={{
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: "7px",
-      padding: "9px 13px",
-      borderRadius: "25px",
-      background: "rgba(212,175,55,0.10)",
-      border: "1px solid rgba(232,202,117,0.45)",
-      color: "#F5D77A",
-      fontSize: "12px",
-      fontWeight: "600",
-      whiteSpace: "nowrap"
-    }}>
-      <span>{icon}</span>
-      <span>{label}</span>
-    </span>
-  ))}
-</div>  
-    
-   </nav>
-    <div style={{ maxWidth:"1100px", margin:"0 auto", padding:"4rem 2rem" }}>
+    <div style={S.app}>
+      <nav style={S.nav}>
+        <div style={S.logo}>⚖️ Legal-Ease</div>
+        <button style={{ ...S.btn("primary"), padding: "8px 16px" }} onClick={() => setScreen("upload")}>
+          Get Started →
+        </button>
+      </nav>
+    <div style={{ maxWidth:"1100px", margin:"0 auto", padding:"clamp(2rem,6vw,4rem) 1.25rem" }}>
+        {/* Trust badges */}
+        <div style={{ display:"flex", gap:"10px", flexWrap:"wrap", justifyContent:"center", marginBottom:"1.75rem" }}>
+          {[["🛡️","Privacy-First"],["🔒","Smart Masking"],["⚖️","AI Contract Analysis"],["🔊","Voice Output"]].map(([icon,label]) => (
+            <span key={label} style={{ display:"inline-flex", alignItems:"center", gap:"7px", padding:"8px 14px",
+              borderRadius:"25px", background:"rgba(212,175,55,0.10)", border:"1px solid rgba(232,202,117,0.45)",
+              color:"#F5D77A", fontSize:"12px", fontWeight:"600" }}>
+              <span>{icon}</span><span>{label}</span>
+            </span>
+          ))}
+        </div>
         {/* Hero */}
         <div style={{ textAlign:"center", marginBottom:"3rem" }}>
-          <div style={{ display:"inline-flex", background:"#EEF2FF", borderRadius:"30px",
-            padding:"8px 20px", marginBottom:"1.5rem", fontSize:"14px", color:"#4338CA", fontWeight:"600" }}>
+          <div style={{ display:"inline-flex", background:"rgba(212,175,55,0.12)", borderRadius:"30px",
+            padding:"8px 20px", marginBottom:"1.5rem", fontSize:"14px", color:"#E8CA75", fontWeight:"600" }}>
             🏆 Gemini AI · Lawyer-Grade Analysis · 8 Indian Languages
           </div>
           <h1 style={{ fontSize:"clamp(2rem,5vw,3.5rem)", fontWeight:"900", lineHeight:"1.15",
-            margin:"0 0 1.5rem", color:"#0F172A" }}>
+            margin:"0 0 1.5rem", color:"#F8F1DC" }}>
             अपनी भाषा में पाएं<br />
-            <span style={{ background:"linear-gradient(135deg,#1D4ED8,#059669)",
+            <span style={{ background:"linear-gradient(135deg,#F5D77A,#C69B35)",
               WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
               वकील जैसी कानूनी सलाह
             </span>
           </h1>
-          <p style={{ fontSize:"17px", color:"#4B5563", maxWidth:"680px",
+          <p style={{ fontSize:"17px", color:"#C9D3CC", maxWidth:"680px",
             margin:"0 auto 2.5rem", lineHeight:"1.8" }}>
             Legal-Ease analyzes your contracts like a <strong>senior Indian lawyer</strong> —
             citing Indian Contract Act, IT Act, and relevant precedents.
@@ -618,14 +611,14 @@ const S = {
 
         {/* Language pills */}
         <div style={{ ...S.card, marginBottom:"2rem", textAlign:"center" }}>
-          <div style={{ fontSize:"12px", color:"#9CA3AF", fontWeight:"700", marginBottom:"12px",
+          <div style={{ fontSize:"12px", color:"#9FB0A6", fontWeight:"700", marginBottom:"12px",
             textTransform:"uppercase", letterSpacing:"0.5px" }}>8 Supported Languages</div>
           <div style={{ display:"flex", flexWrap:"wrap", justifyContent:"center", gap:"10px" }}>
             {LANGUAGES.map(l => (
-              <span key={l.code} style={{ background:"#F8FAFC", border:"1px solid #E2E8F0",
-                borderRadius:"20px", padding:"6px 16px", fontSize:"15px", fontWeight:"600", color:"#1E293B" }}>
+              <span key={l.code} style={{ background:"rgba(212,175,55,0.08)", border:"1px solid rgba(212,175,55,0.3)",
+                borderRadius:"20px", padding:"6px 16px", fontSize:"15px", fontWeight:"600", color:"#F5F0DF" }}>
                 {l.flag} {l.label}
-                <span style={{ fontSize:"12px", color:"#94A3B8", marginLeft:"4px" }}>({l.name})</span>
+                <span style={{ fontSize:"12px", color:"#B9A66A", marginLeft:"4px" }}>({l.name})</span>
               </span>
             ))}
           </div>
@@ -635,49 +628,49 @@ const S = {
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",
           gap:"1.5rem", marginBottom:"3rem" }}>
           {[
-            { icon:"⚖️", color:"#1D4ED8", title:"Lawyer-Grade Analysis",
+            { icon:"⚖️", color:"#E8CA75", title:"Lawyer-Grade Analysis",
               desc:"Every clause is analyzed citing Indian Contract Act 1872, IT Act, Labour laws. Risk scored High/Medium/Low with exact legal reasoning." },
-            { icon:"🔒", color:"#7C3AED", title:"Smart PII Masking",
+            { icon:"🔒", color:"#E8CA75", title:"Smart PII Masking",
               desc:"Names, IDs, phone numbers, bank details replaced with [NAME_1], [COMPANY_1] in your browser before sending. Gemini never sees real data." },
-            { icon:"🌐", color:"#059669", title:"8 Regional Languages",
+            { icon:"🌐", color:"#E8CA75", title:"8 Regional Languages",
               desc:"100% output in Hindi, Tamil, Telugu, Marathi, Kannada, Gujarati, Bengali, or Punjabi. Zero English mixing in analysis." },
-            { icon:"🔊", color:"#D97706", title:"Voice Response",
+            { icon:"🔊", color:"#E8CA75", title:"Voice Response",
               desc:"Click 🔊 on any clause or chat reply to hear it read aloud in your language. Uses browser's built-in text-to-speech." },
-            { icon:"📥", color:"#059669", title:"PDF Report",
+            { icon:"📥", color:"#E8CA75", title:"PDF Report",
               desc:"Download a professional report with legal opinion, pie chart, clause table, recommendations — shareable with your lawyer." },
-            { icon:"💬", color:"#EF4444", title:"Legal Q&A Chat",
+            { icon:"💬", color:"#E8CA75", title:"Legal Q&A Chat",
               desc:"Ask follow-up questions like 'Can they actually take unlimited money from me?' Get lawyer-style answers in your language." },
           ].map(f => (
             <div key={f.title} style={{ ...S.card, borderTop:`3px solid ${f.color}` }}>
               <div style={{ fontSize:"26px", marginBottom:"10px" }}>{f.icon}</div>
               <h3 style={{ fontWeight:"700", fontSize:"15px", marginBottom:"8px", color:f.color }}>{f.title}</h3>
-              <p style={{ fontSize:"13px", color:"#6B7280", lineHeight:"1.6", margin:0 }}>{f.desc}</p>
+              <p style={{ fontSize:"13px", color:"#B9C5BD", lineHeight:"1.6", margin:0 }}>{f.desc}</p>
             </div>
           ))}
         </div>
 
         {/* Masking flow */}
-        <div style={{ ...S.card, background:"#0F172A", color:"white", padding:"2rem" }}>
-          <div style={{ fontSize:"12px", color:"#94A3B8", fontWeight:"700", marginBottom:"1.5rem",
+        <div style={{ ...S.card, background:"linear-gradient(145deg,#06150F,#0A2119)", color:"white", padding:"2rem" }}>
+          <div style={{ fontSize:"12px", color:"#B9A66A", fontWeight:"700", marginBottom:"1.5rem",
             textTransform:"uppercase", letterSpacing:"1.5px" }}>🔐 How Your Data Stays Private</div>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:"1rem" }}>
             {[
-              { n:"1", icon:"🖥️", color:"#60A5FA", label:"Browser Masks", desc:"PII replaced locally" },
-              { n:"2", icon:"📡", color:"#A78BFA", label:"Masked Sent",    desc:"No real PII travels" },
-              { n:"3", icon:"🤖", color:"#34D399", label:"Gemini Analyzes",desc:"Sees only placeholders" },
-              { n:"4", icon:"📋", color:"#FCD34D", label:"JSON Returned",  desc:"Analysis result back" },
-              { n:"5", icon:"✨", color:"#F9A8D4", label:"Browser Rebuilds",desc:"Real values restored" },
+              { n:"1", icon:"🖥️", color:"#E8CA75", label:"Browser Masks", desc:"PII replaced locally" },
+              { n:"2", icon:"📡", color:"#E8CA75", label:"Masked Sent",    desc:"No real PII travels" },
+              { n:"3", icon:"🤖", color:"#E8CA75", label:"Gemini Analyzes",desc:"Sees only placeholders" },
+              { n:"4", icon:"📋", color:"#E8CA75", label:"JSON Returned",  desc:"Analysis result back" },
+              { n:"5", icon:"✨", color:"#E8CA75", label:"Browser Rebuilds",desc:"Real values restored" },
             ].map(s => (
-              <div key={s.n} style={{ background:"#1E293B", borderRadius:"12px",
+              <div key={s.n} style={{ background:"#0F2A20", borderRadius:"12px",
                 padding:"1rem", borderTop:`2px solid ${s.color}` }}>
                 <div style={{ fontSize:"18px", marginBottom:"6px" }}>{s.icon}</div>
                 <div style={{ fontSize:"10px", color:s.color, fontWeight:"700", marginBottom:"3px" }}>STEP {s.n}</div>
                 <div style={{ fontWeight:"600", fontSize:"12px", marginBottom:"3px" }}>{s.label}</div>
-                <div style={{ fontSize:"11px", color:"#94A3B8" }}>{s.desc}</div>
+                <div style={{ fontSize:"11px", color:"#B9A66A" }}>{s.desc}</div>
               </div>
             ))}
           </div>
-          <div style={{ marginTop:"1.5rem", background:"#1E293B", borderRadius:"10px",
+          <div style={{ marginTop:"1.5rem", background:"#0F2A20", borderRadius:"10px",
             padding:"1rem", fontFamily:"monospace", fontSize:"12px" }}>
             <div style={{ color:"#F87171", marginBottom:"4px" }}>❌ Original: Rajesh Kumar, GSTIN 07AAACT1234F1Z5, +91-9876543210</div>
             <div style={{ color:"#6EE7B7" }}>✅ What Gemini sees: [NAME_1], GSTIN [ID_1], [PHONE_1]</div>
@@ -696,16 +689,16 @@ const S = {
       </nav>
       <div style={{ maxWidth:"720px", margin:"0 auto", padding:"3rem 2rem" }}>
         <h2 style={{ fontWeight:"800", fontSize:"28px", marginBottom:"0.5rem" }}>Upload Your Contract</h2>
-        <p style={{ color:"#6B7280", marginBottom:"2rem" }}>
+        <p style={{ color:"#B9C5BD", marginBottom:"2rem" }}>
           Names, IDs and contacts are masked in your browser before anything is sent.
         </p>
 
         {error && (
-          <div style={{ background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:"10px",
-            padding:"1rem", marginBottom:"1.5rem", color:"#DC2626", fontSize:"14px" }}>
+          <div style={{ background:"rgba(239,68,68,0.12)", border:"1px solid rgba(239,68,68,0.4)", borderRadius:"10px",
+            padding:"1rem", marginBottom:"1.5rem", color:"#FCA5A5", fontSize:"14px" }}>
             ⚠️ {error}
             {error.toLowerCase().includes("api") && (
-              <div style={{ marginTop:"8px", background:"#FFF1F1", borderRadius:"6px",
+              <div style={{ marginTop:"8px", background:"rgba(239,68,68,0.15)", borderRadius:"6px",
                 padding:"8px", fontSize:"13px" }}>
                 💡 Make sure <code>GOOGLE_API_KEY</code> is set in your backend <code>.env</code> file.
               </div>
@@ -719,23 +712,23 @@ const S = {
           onDragOver={e => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onClick={() => fileRef.current?.click()}
-          style={{ border:`2px dashed ${dragOver?"#1D4ED8":"#D1D5DB"}`,
+          style={{ border:`2px dashed ${dragOver?"#E8CA75":"rgba(212,175,55,0.35)"}`,
             borderRadius:"16px", padding:"3rem", textAlign:"center", cursor:"pointer",
-            background:dragOver?"#EEF2FF":"#FAFAFA", transition:"all 0.2s", marginBottom:"1.5rem" }}>
+            background:dragOver?"rgba(212,175,55,0.12)":"rgba(255,255,255,0.03)", transition:"all 0.2s", marginBottom:"1.5rem" }}>
           <input ref={fileRef} type="file" accept=".txt,.pdf" style={{ display:"none" }}
             onChange={e => e.target.files[0] && handleFile(e.target.files[0])} />
           <div style={{ fontSize:"48px", marginBottom:"1rem" }}>📄</div>
           <p style={{ fontWeight:"600", marginBottom:"4px" }}>Drag & drop or click to upload</p>
-          <p style={{ fontSize:"13px", color:"#9CA3AF" }}>Supports .TXT and .PDF files</p>
+          <p style={{ fontSize:"13px", color:"#9FB0A6" }}>Supports .TXT and .PDF files</p>
           <div style={{ marginTop:"1rem" }}>
             <span style={S.badge("#059669")}>🔒 Masked in browser before upload</span>
           </div>
         </div>
 
         <div style={{ display:"flex", alignItems:"center", gap:"1rem", marginBottom:"1.5rem" }}>
-          <div style={{ flex:1, height:"1px", background:"#E5E7EB" }} />
-          <span style={{ color:"#9CA3AF", fontSize:"13px" }}>OR PASTE TEXT</span>
-          <div style={{ flex:1, height:"1px", background:"#E5E7EB" }} />
+          <div style={{ flex:1, height:"1px", background:"rgba(212,175,55,0.25)" }} />
+          <span style={{ color:"#9FB0A6", fontSize:"13px" }}>OR PASTE TEXT</span>
+          <div style={{ flex:1, height:"1px", background:"rgba(212,175,55,0.25)" }} />
         </div>
 
         <textarea
@@ -743,8 +736,8 @@ const S = {
           onChange={e => setContractText(e.target.value)}
           placeholder="Paste your contract text here..."
           style={{ width:"100%", height:"220px", padding:"1rem", borderRadius:"12px",
-            border:"1px solid #D1D5DB", fontSize:"14px", fontFamily:"inherit",
-            resize:"vertical", outline:"none", boxSizing:"border-box", background:"white" }}
+            border:"1px solid rgba(212,175,55,0.35)", fontSize:"14px", fontFamily:"inherit",
+            resize:"vertical", outline:"none", boxSizing:"border-box", background:"#0F2A20", color:"#F5F0DF" }}
         />
 
         <div style={{ display:"flex", gap:"12px", marginTop:"1.5rem" }}>
@@ -772,27 +765,27 @@ const S = {
       </nav>
       <div style={{ maxWidth:"700px", margin:"0 auto", padding:"3rem 2rem" }}>
         <h2 style={{ fontWeight:"800", fontSize:"28px", marginBottom:"0.5rem" }}>Select Output Language</h2>
-        <p style={{ color:"#6B7280", marginBottom:"2rem" }}>
+        <p style={{ color:"#B9C5BD", marginBottom:"2rem" }}>
           Legal analysis will be 100% in selected language. Zero English mixing.
         </p>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px", marginBottom:"2rem" }}>
           {LANGUAGES.map(lang => (
             <div key={lang.code} onClick={() => setLanguage(lang.code)}
               style={{ ...S.card, cursor:"pointer",
-                border: language===lang.code ? "2px solid #1D4ED8" : "1px solid #E5E7EB",
-                background: language===lang.code ? "#EEF2FF" : "white",
+                border: language===lang.code ? "2px solid #E8CA75" : "1px solid rgba(212,175,55,0.25)",
+                background: language===lang.code ? "rgba(212,175,55,0.12)" : "rgba(255,255,255,0.04)",
                 display:"flex", alignItems:"center", gap:"12px", padding:"1rem", transition:"all 0.2s" }}>
               <div style={{ fontSize:"22px" }}>{lang.flag}</div>
               <div style={{ flex:1 }}>
                 <div style={{ fontWeight:"700", fontSize:"17px" }}>{lang.label}</div>
-                <div style={{ color:"#6B7280", fontSize:"12px" }}>{lang.name}</div>
+                <div style={{ color:"#B9C5BD", fontSize:"12px" }}>{lang.name}</div>
               </div>
-              {language===lang.code && <div style={{ color:"#1D4ED8", fontWeight:"700" }}>✓</div>}
+              {language===lang.code && <div style={{ color:"#E8CA75", fontWeight:"700" }}>✓</div>}
             </div>
           ))}
         </div>
-        <div style={{ ...S.card, background:"#F0FDF4", border:"1px solid #A7F3D0", marginBottom:"2rem" }}>
-          <p style={{ margin:0, fontSize:"14px", color:"#065F46" }}>
+        <div style={{ ...S.card, background:"rgba(52,211,153,0.10)", border:"1px solid rgba(52,211,153,0.35)", marginBottom:"2rem" }}>
+          <p style={{ margin:0, fontSize:"14px", color:"#6EE7B7" }}>
             ⚖️ <strong>Lawyer-grade analysis in {selectedLang?.name}.</strong>{" "}
             Clauses will be analyzed citing Indian Contract Act, with risk scoring and negotiation advice.
           </p>
@@ -818,7 +811,7 @@ const S = {
         <h2 style={{ fontWeight:"800", fontSize:"24px", marginBottom:"0.5rem" }}>
           Running Legal Analysis
         </h2>
-        <p style={{ color:"#6B7280", fontSize:"14px", marginBottom:"1.5rem" }}>
+        <p style={{ color:"#B9C5BD", fontSize:"14px", marginBottom:"1.5rem" }}>
           Gemini is analyzing your contract as a senior Indian lawyer would…
         </p>
         <div style={{ display:"flex", flexDirection:"column", gap:"10px", marginBottom:"2rem" }}>
@@ -830,20 +823,20 @@ const S = {
             { icon:"✨", text:"Reconstructing your real values in output…" },
           ].map((s,i) => (
             <div key={i} style={{ display:"flex", alignItems:"center", gap:"10px",
-              background:"white", borderRadius:"10px", padding:"12px 16px",
-              border:"1px solid #E5E7EB",
+              background:"#0F2A20", borderRadius:"10px", padding:"12px 16px",
+              border:"1px solid rgba(212,175,55,0.25)",
               animation:`pulse 1.5s ease-in-out ${i*0.25}s infinite` }}>
               <span style={{ fontSize:"18px" }}>{s.icon}</span>
-              <span style={{ fontSize:"14px", color:"#374151" }}>{s.text}</span>
+              <span style={{ fontSize:"14px", color:"#E2E8E3" }}>{s.text}</span>
             </div>
           ))}
         </div>
         {maskedPreview && (
-          <div style={{ background:"#0F172A", borderRadius:"10px", padding:"1rem", textAlign:"left" }}>
+          <div style={{ background:"linear-gradient(145deg,#06150F,#0A2119)", borderRadius:"10px", padding:"1rem", textAlign:"left" }}>
             <div style={{ fontSize:"11px", color:"#6EE7B7", fontWeight:"600", marginBottom:"6px" }}>
               ✅ WHAT GEMINI RECEIVES (masked):
             </div>
-            <div style={{ fontFamily:"monospace", fontSize:"11px", color:"#94A3B8",
+            <div style={{ fontFamily:"monospace", fontSize:"11px", color:"#B9A66A",
               lineHeight:"1.6", wordBreak:"break-all" }}>{maskedPreview}</div>
           </div>
         )}
@@ -861,7 +854,7 @@ const S = {
           <div style={S.logo} onClick={() => setScreen("landing")}>⚖️ Legal-Ease</div>
           <div style={{ display:"flex", gap:"8px", alignItems:"center", flexWrap:"wrap" }}>
             <span style={S.badge("#059669")}>🔒 {piiCount} PII protected</span>
-            <span style={S.badge("#1D4ED8")}>{selectedLang?.flag} {selectedLang?.name}</span>
+            <span style={S.badge("#E8CA75")}>{selectedLang?.flag} {selectedLang?.name}</span>
             <button style={S.btn("outline")} onClick={handlePDF} disabled={pdfLoading}>
               {pdfLoading ? "⏳ Generating…" : "📥 Download PDF"}
             </button>
@@ -877,10 +870,10 @@ const S = {
           {/* Risk Banner */}
           <div style={{
             background: analysis.overallRisk==="High"
-              ? "linear-gradient(135deg,#DC2626,#991B1B)"
+              ? "linear-gradient(135deg,#DC2626,#FCA5A5)"
               : analysis.overallRisk==="Medium"
-              ? "linear-gradient(135deg,#D97706,#92400E)"
-              : "linear-gradient(135deg,#059669,#065F46)",
+              ? "linear-gradient(135deg,#D97706,#E8CA75)"
+              : "linear-gradient(135deg,#059669,#6EE7B7)",
             borderRadius:"16px", padding:"1.5rem 2rem", color:"white",
             marginBottom:"1.5rem", display:"flex", flexWrap:"wrap",
             alignItems:"center", justifyContent:"space-between", gap:"12px",
@@ -913,8 +906,8 @@ const S = {
           </div>
 
           {/* Tabs */}
-          <div style={{ display:"flex", gap:"4px", background:"white", borderRadius:"12px",
-            padding:"4px", border:"1px solid #E5E7EB", marginBottom:"1.5rem", overflowX:"auto" }}>
+          <div style={{ display:"flex", gap:"4px", background:"#0F2A20", borderRadius:"12px",
+            padding:"4px", border:"1px solid rgba(212,175,55,0.25)", marginBottom:"1.5rem", overflowX:"auto" }}>
             {[
               { id:"opinion",  label:"⚖️ Legal Opinion" },
               { id:"clauses",  label:"📄 Clause Analysis" },
@@ -925,8 +918,8 @@ const S = {
               <button key={t.id} onClick={() => setActiveTab(t.id)}
                 style={{ flex:1, minWidth:"110px", padding:"10px 14px", borderRadius:"8px",
                   border:"none", fontWeight:"600", fontSize:"13px", cursor:"pointer",
-                  background: activeTab===t.id ? "#1D4ED8" : "transparent",
-                  color: activeTab===t.id ? "white" : "#6B7280",
+                  background: activeTab===t.id ? "#9A7220" : "transparent",
+                  color: activeTab===t.id ? "white" : "#B9C5BD",
                   transition:"all 0.2s", whiteSpace:"nowrap" }}>
                 {t.label}
               </button>
@@ -940,30 +933,30 @@ const S = {
               {/* Summary */}
               <div style={{ gridColumn:"1 / -1", ...S.card }}>
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1rem" }}>
-                  <h3 style={{ fontWeight:"700", color:"#1D4ED8", fontSize:"16px", margin:0 }}>
+                  <h3 style={{ fontWeight:"700", color:"#E8CA75", fontSize:"16px", margin:0 }}>
                     📋 Contract Summary
                   </h3>
                   <button style={S.btn("voice")} onClick={() => toggleSpeak(analysis.summary)}>
                     {speaking ? "⏹ Stop" : "🔊 Listen"}
                   </button>
                 </div>
-                <p style={{ fontSize:"15px", lineHeight:"1.8", color:"#374151", margin:0 }}>
+                <p style={{ fontSize:"15px", lineHeight:"1.8", color:"#E2E8E3", margin:0 }}>
                   {analysis.summary}
                 </p>
               </div>
 
               {/* Legal Opinion */}
               <div style={{ gridColumn:"1 / -1", ...S.card,
-                borderLeft:"4px solid #1D4ED8", background:"#EEF2FF" }}>
+                borderLeft:"4px solid #E8CA75", background:"rgba(212,175,55,0.12)" }}>
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1rem" }}>
-                  <h3 style={{ fontWeight:"700", color:"#1D4ED8", fontSize:"16px", margin:0 }}>
+                  <h3 style={{ fontWeight:"700", color:"#E8CA75", fontSize:"16px", margin:0 }}>
                     ⚖️ Professional Legal Opinion
                   </h3>
                   <button style={S.btn("voice")} onClick={() => toggleSpeak(analysis.legalOpinion)}>
                     {speaking ? "⏹ Stop" : "🔊 Listen"}
                   </button>
                 </div>
-                <p style={{ fontSize:"15px", lineHeight:"1.9", color:"#1E3A5F", margin:0, fontStyle:"italic" }}>
+                <p style={{ fontSize:"15px", lineHeight:"1.9", color:"#E8E0C0", margin:0, fontStyle:"italic" }}>
                   {analysis.legalOpinion}
                 </p>
               </div>
@@ -976,12 +969,12 @@ const S = {
                 <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
                   {(analysis.recommendations || []).map((rec, i) => (
                     <div key={i} style={{ display:"flex", gap:"10px", alignItems:"flex-start" }}>
-                      <span style={{ background:"#EEF2FF", color:"#1D4ED8", borderRadius:"50%",
+                      <span style={{ background:"rgba(212,175,55,0.12)", color:"#E8CA75", borderRadius:"50%",
                         width:"22px", height:"22px", display:"flex", alignItems:"center",
                         justifyContent:"center", fontWeight:"700", fontSize:"12px", flexShrink:0 }}>
                         {i+1}
                       </span>
-                      <span style={{ fontSize:"14px", color:"#374151", lineHeight:"1.6" }}>{rec}</span>
+                      <span style={{ fontSize:"14px", color:"#E2E8E3", lineHeight:"1.6" }}>{rec}</span>
                     </div>
                   ))}
                 </div>
@@ -995,17 +988,17 @@ const S = {
                 <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
                   {Object.entries(masker?.getMap() || {}).slice(0, 8).map(([ph, orig]) => (
                     <div key={ph} style={{ display:"flex", justifyContent:"space-between",
-                      alignItems:"center", padding:"8px 12px", background:"#F9FAFB",
+                      alignItems:"center", padding:"8px 12px", background:"rgba(255,255,255,0.04)",
                       borderRadius:"8px", fontSize:"13px" }}>
-                      <span style={{ fontFamily:"monospace", color:"#7C3AED", fontWeight:"600" }}>{ph}</span>
-                      <span style={{ color:"#6B7280" }}>→ {orig.length>22 ? orig.substring(0,22)+"…" : orig}</span>
+                      <span style={{ fontFamily:"monospace", color:"#D9B861", fontWeight:"600" }}>{ph}</span>
+                      <span style={{ color:"#B9C5BD" }}>→ {orig.length>22 ? orig.substring(0,22)+"…" : orig}</span>
                     </div>
                   ))}
                   {piiCount === 0 && (
-                    <p style={{ fontSize:"13px", color:"#6B7280" }}>No PII entities detected in this contract.</p>
+                    <p style={{ fontSize:"13px", color:"#B9C5BD" }}>No PII entities detected in this contract.</p>
                   )}
                   {piiCount > 8 && (
-                    <p style={{ fontSize:"12px", color:"#9CA3AF" }}>
+                    <p style={{ fontSize:"12px", color:"#9FB0A6" }}>
                       …and {piiCount - 8} more entities protected
                     </p>
                   )}
@@ -1023,11 +1016,11 @@ const S = {
                   <button key={f} onClick={() => setFilterRisk(f)}
                     style={{ padding:"8px 18px", borderRadius:"20px", fontWeight:"600",
                       fontSize:"13px", cursor:"pointer", transition:"all 0.2s",
-                      border: filterRisk===f ? "none" : "1px solid #D1D5DB",
+                      border: filterRisk===f ? "none" : "1px solid rgba(212,175,55,0.35)",
                       background: filterRisk===f
-                        ? (f==="All"?"#1D4ED8":f==="High"?"#EF4444":f==="Medium"?"#F59E0B":"#22C55E")
-                        : "white",
-                      color: filterRisk===f ? "white" : "#374151" }}>
+                        ? (f==="All"?"#9A7220":f==="High"?"#EF4444":f==="Medium"?"#F59E0B":"#22C55E")
+                        : "rgba(255,255,255,0.04)",
+                      color: filterRisk===f ? "white" : "#E2E8E3" }}>
                     {f==="All" ? `All (${analysis.clauses.length})`
                       : `${f==="High"?"🔴":f==="Medium"?"🟡":"🟢"} ${f} (${riskCounts[f]})`}
                   </button>
@@ -1042,7 +1035,7 @@ const S = {
                   return (
                     <div key={clause.id}
                       style={{ ...S.card, borderLeft:`4px solid ${rc.color}`,
-                        background: isExp ? rc.bg : "white",
+                        background: isExp ? rc.bg : "rgba(255,255,255,0.04)",
                         transition:"all 0.2s", cursor:"pointer" }}
                       onClick={() => setExpandedClause(isExp ? null : clause.id)}>
 
@@ -1057,12 +1050,12 @@ const S = {
                             <span style={{ fontWeight:"700", fontSize:"15px" }}>{clause.title}</span>
                           </div>
                           {!isExp && (
-                            <p style={{ margin:"8px 0 0", fontSize:"14px", color:"#6B7280", lineHeight:"1.5" }}>
+                            <p style={{ margin:"8px 0 0", fontSize:"14px", color:"#B9C5BD", lineHeight:"1.5" }}>
                               {clause.simplified?.substring(0,130)}…
                             </p>
                           )}
                         </div>
-                        <span style={{ fontSize:"16px", color:"#9CA3AF", transition:"transform 0.2s",
+                        <span style={{ fontSize:"16px", color:"#9FB0A6", transition:"transform 0.2s",
                           display:"inline-block", transform: isExp?"rotate(180deg)":"none" }}>▼</span>
                       </div>
 
@@ -1074,37 +1067,37 @@ const S = {
 
                           {/* Original quote */}
                           <div style={{ marginBottom:"1rem" }}>
-                            <div style={{ fontSize:"11px", fontWeight:"700", color:"#9CA3AF",
+                            <div style={{ fontSize:"11px", fontWeight:"700", color:"#9FB0A6",
                               marginBottom:"6px", textTransform:"uppercase", letterSpacing:"0.5px" }}>
                               📄 Original Contract Language
                             </div>
-                            <div style={{ background:"#F9FAFB", borderRadius:"8px", padding:"12px",
-                              fontSize:"13px", color:"#374151", fontStyle:"italic", lineHeight:"1.7",
-                              borderLeft:"3px solid #D1D5DB" }}>
+                            <div style={{ background:"rgba(255,255,255,0.04)", borderRadius:"8px", padding:"12px",
+                              fontSize:"13px", color:"#E2E8E3", fontStyle:"italic", lineHeight:"1.7",
+                              borderLeft:"3px solid rgba(212,175,55,0.35)" }}>
                               "{clause.original}"
                             </div>
                           </div>
 
                           {/* Simplified */}
                           <div style={{ marginBottom:"1rem" }}>
-                            <div style={{ fontSize:"11px", fontWeight:"700", color:"#9CA3AF",
+                            <div style={{ fontSize:"11px", fontWeight:"700", color:"#9FB0A6",
                               marginBottom:"6px", textTransform:"uppercase", letterSpacing:"0.5px" }}>
                               💡 Plain Language Explanation
                             </div>
-                            <div style={{ fontSize:"15px", color:"#111827", lineHeight:"1.8" }}>
+                            <div style={{ fontSize:"15px", color:"#F5F0DF", lineHeight:"1.8" }}>
                               {clause.simplified}
                             </div>
                           </div>
 
                           {/* Legal Analysis — the lawyer section */}
-                          <div style={{ marginBottom:"1rem", background:"#EEF2FF",
+                          <div style={{ marginBottom:"1rem", background:"rgba(212,175,55,0.12)",
                             borderRadius:"10px", padding:"14px 16px",
-                            borderLeft:"3px solid #1D4ED8" }}>
-                            <div style={{ fontSize:"11px", fontWeight:"700", color:"#1D4ED8",
+                            borderLeft:"3px solid #E8CA75" }}>
+                            <div style={{ fontSize:"11px", fontWeight:"700", color:"#E8CA75",
                               marginBottom:"8px", textTransform:"uppercase", letterSpacing:"0.5px" }}>
                               ⚖️ Legal Analysis
                             </div>
-                            <div style={{ fontSize:"14px", color:"#1E3A5F", lineHeight:"1.8" }}>
+                            <div style={{ fontSize:"14px", color:"#E8E0C0", lineHeight:"1.8" }}>
                               {clause.legalAnalysis}
                             </div>
                           </div>
@@ -1117,19 +1110,19 @@ const S = {
                               marginBottom:"6px", textTransform:"uppercase", letterSpacing:"0.5px" }}>
                               ⚠️ Real-World Risk
                             </div>
-                            <div style={{ fontSize:"14px", color:"#374151", lineHeight:"1.7" }}>
+                            <div style={{ fontSize:"14px", color:"#E2E8E3", lineHeight:"1.7" }}>
                               {clause.warning}
                             </div>
                           </div>
 
                           {/* Recommendation */}
-                          <div style={{ background:"#F0FDF4", borderRadius:"10px",
-                            padding:"12px 16px", border:"1px solid #A7F3D0" }}>
-                            <div style={{ fontSize:"11px", fontWeight:"700", color:"#059669",
+                          <div style={{ background:"rgba(52,211,153,0.10)", borderRadius:"10px",
+                            padding:"12px 16px", border:"1px solid rgba(52,211,153,0.35)" }}>
+                            <div style={{ fontSize:"11px", fontWeight:"700", color:"#E8CA75",
                               marginBottom:"6px", textTransform:"uppercase", letterSpacing:"0.5px" }}>
                               ✅ Negotiation Recommendation
                             </div>
-                            <div style={{ fontSize:"14px", color:"#374151", lineHeight:"1.7" }}>
+                            <div style={{ fontSize:"14px", color:"#E2E8E3", lineHeight:"1.7" }}>
                               {clause.recommendation}
                             </div>
                           </div>
@@ -1173,7 +1166,7 @@ const S = {
                           whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
                           {clause.title}
                         </div>
-                        <div style={{ fontSize:"12px", color:"#6B7280",
+                        <div style={{ fontSize:"12px", color:"#B9C5BD",
                           whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
                           {clause.simplified?.substring(0, 80)}…
                         </div>
@@ -1192,19 +1185,19 @@ const S = {
 
               {/* Red flags */}
               <div style={{ ...S.card, borderTop:"3px solid #EF4444" }}>
-                <h3 style={{ fontWeight:"700", fontSize:"15px", marginBottom:"1rem", color:"#DC2626" }}>
+                <h3 style={{ fontWeight:"700", fontSize:"15px", marginBottom:"1rem", color:"#FCA5A5" }}>
                   🚨 Critical Red Flags
                 </h3>
                 {(analysis.redFlags || []).length === 0 ? (
-                  <p style={{ color:"#6B7280", fontSize:"14px" }}>No critical red flags detected.</p>
+                  <p style={{ color:"#B9C5BD", fontSize:"14px" }}>No critical red flags detected.</p>
                 ) : (
                   <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
                     {(analysis.redFlags || []).map((rf, i) => (
                       <div key={i} style={{ display:"flex", gap:"10px", alignItems:"flex-start",
-                        padding:"10px 12px", background:"#FEF2F2", borderRadius:"8px",
-                        border:"1px solid #FECACA" }}>
-                        <span style={{ color:"#DC2626", fontWeight:"700", fontSize:"16px", flexShrink:0 }}>!</span>
-                        <span style={{ fontSize:"14px", color:"#374151", lineHeight:"1.6" }}>{rf}</span>
+                        padding:"10px 12px", background:"rgba(239,68,68,0.12)", borderRadius:"8px",
+                        border:"1px solid rgba(239,68,68,0.4)" }}>
+                        <span style={{ color:"#FCA5A5", fontWeight:"700", fontSize:"16px", flexShrink:0 }}>!</span>
+                        <span style={{ fontSize:"14px", color:"#E2E8E3", lineHeight:"1.6" }}>{rf}</span>
                       </div>
                     ))}
                   </div>
@@ -1212,20 +1205,20 @@ const S = {
               </div>
 
               {/* Missing clauses */}
-              <div style={{ ...S.card, borderTop:"3px solid #7C3AED" }}>
-                <h3 style={{ fontWeight:"700", fontSize:"15px", marginBottom:"1rem", color:"#7C3AED" }}>
+              <div style={{ ...S.card, borderTop:"3px solid #D9B861" }}>
+                <h3 style={{ fontWeight:"700", fontSize:"15px", marginBottom:"1rem", color:"#D9B861" }}>
                   📋 Missing Protective Clauses
                 </h3>
                 {(analysis.missingClauses || []).length === 0 ? (
-                  <p style={{ color:"#6B7280", fontSize:"14px" }}>No missing clauses identified.</p>
+                  <p style={{ color:"#B9C5BD", fontSize:"14px" }}>No missing clauses identified.</p>
                 ) : (
                   <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
                     {(analysis.missingClauses || []).map((mc, i) => (
                       <div key={i} style={{ display:"flex", gap:"10px", alignItems:"flex-start",
-                        padding:"10px 12px", background:"#F5F3FF", borderRadius:"8px",
-                        border:"1px solid #DDD6FE" }}>
-                        <span style={{ color:"#7C3AED", fontWeight:"700", fontSize:"16px", flexShrink:0 }}>+</span>
-                        <span style={{ fontSize:"14px", color:"#374151", lineHeight:"1.6" }}>{mc}</span>
+                        padding:"10px 12px", background:"rgba(212,175,55,0.08)", borderRadius:"8px",
+                        border:"1px solid rgba(212,175,55,0.3)" }}>
+                        <span style={{ color:"#D9B861", fontWeight:"700", fontSize:"16px", flexShrink:0 }}>+</span>
+                        <span style={{ fontSize:"14px", color:"#E2E8E3", lineHeight:"1.6" }}>{mc}</span>
                       </div>
                     ))}
                   </div>
@@ -1239,7 +1232,7 @@ const S = {
                   <h3 style={{ fontWeight:"700", fontSize:"15px", marginBottom:"8px", color:rc.dark }}>
                     💼 Signing Advice
                   </h3>
-                  <p style={{ fontSize:"15px", color:"#374151", margin:0, lineHeight:"1.7" }}>
+                  <p style={{ fontSize:"15px", color:"#E2E8E3", margin:0, lineHeight:"1.7" }}>
                     {analysis.signingAdvice}
                   </p>
                 </div>
@@ -1253,14 +1246,14 @@ const S = {
               <h3 style={{ fontWeight:"700", marginBottom:"0.5rem", fontSize:"16px" }}>
                 💬 Ask Lawyer AI
               </h3>
-              <p style={{ color:"#6B7280", fontSize:"13px", marginBottom:"1.5rem" }}>
+              <p style={{ color:"#B9C5BD", fontSize:"13px", marginBottom:"1.5rem" }}>
                 Ask follow-up questions in {selectedLang?.name}. Answers cite relevant Indian law.
               </p>
 
               {/* Suggested questions */}
               {chatMessages.length === 0 && (
                 <div style={{ marginBottom:"1.5rem" }}>
-                  <div style={{ fontSize:"12px", color:"#9CA3AF", marginBottom:"8px", fontWeight:"600" }}>
+                  <div style={{ fontSize:"12px", color:"#9FB0A6", marginBottom:"8px", fontWeight:"600" }}>
                     SUGGESTED QUESTIONS
                   </div>
                   <div style={{ display:"flex", flexWrap:"wrap", gap:"8px" }}>
@@ -1288,12 +1281,12 @@ const S = {
                     justifyContent: msg.role==="user" ? "flex-end" : "flex-start" }}>
                     <div style={{ maxWidth:"82%", padding:"12px 16px", borderRadius:"12px",
                       fontSize:"14px", lineHeight:"1.7",
-                      background: msg.role==="user" ? "#1D4ED8" : "#F3F4F6",
-                      color: msg.role==="user" ? "white" : "#111827" }}>
+                      background: msg.role==="user" ? "#9A7220" : "rgba(255,255,255,0.07)",
+                      color: msg.role==="user" ? "white" : "#F5F0DF" }}>
                       {msg.role==="ai" && (
                         <div style={{ display:"flex", alignItems:"center",
                           justifyContent:"space-between", marginBottom:"6px" }}>
-                          <span style={{ fontSize:"12px", color:"#6B7280" }}>⚖️ Lawyer AI</span>
+                          <span style={{ fontSize:"12px", color:"#B9C5BD" }}>⚖️ Lawyer AI</span>
                           <button style={{ ...S.btn("voice"), padding:"3px 8px", fontSize:"11px" }}
                             onClick={() => toggleSpeak(msg.text)}>
                             🔊
@@ -1305,8 +1298,8 @@ const S = {
                   </div>
                 ))}
                 {chatLoading && (
-                  <div style={{ alignSelf:"flex-start", background:"#F3F4F6",
-                    borderRadius:"12px", padding:"12px 16px", fontSize:"14px", color:"#6B7280" }}>
+                  <div style={{ alignSelf:"flex-start", background:"rgba(255,255,255,0.07)",
+                    borderRadius:"12px", padding:"12px 16px", fontSize:"14px", color:"#B9C5BD" }}>
                     ⚖️ Lawyer AI is thinking…
                   </div>
                 )}
@@ -1320,7 +1313,7 @@ const S = {
                   onKeyDown={e => e.key==="Enter" && handleChat()}
                   placeholder={`Ask in ${selectedLang?.name}…`}
                   style={{ flex:1, padding:"12px 16px", borderRadius:"10px",
-                    border:"1px solid #D1D5DB", fontSize:"14px",
+                    border:"1px solid rgba(212,175,55,0.35)", fontSize:"14px",
                     fontFamily:"inherit", outline:"none" }}
                 />
                 <button style={S.btn("primary")} onClick={handleChat}
@@ -1338,3 +1331,496 @@ const S = {
 
   return null;
 }
+// =============================================================================
+//  Legal-Ease — Frontend  (React + Vite)
+//
+//  Responsibilities:
+//    - Smart PII masking BEFORE sending to backend
+//    - Reconstruction of real values in AI output
+//    - Lawyer-grade analysis display
+//    - Voice (TTS) output
+//    - PDF download
+//    - Chat assistant
+//
+//  Place this file at:  src/App.jsx
+//  Backend URL comes from VITE_API_BASE (set it in Vercel -> Environment Variables)
+// =============================================================================
+
+import { useState, useRef, useCallback, useEffect } from "react";
+
+// ── Config --------------------------------------------------------------------
+const API_BASE = (import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000").replace(/\/$/, "");
+const API_KEY  = import.meta.env.VITE_API_KEY || "legal-ease-secret-123";
+const HEADERS  = { "X-API-Key": API_KEY };
+
+// ── Languages ----------------------------------------------------------------
+const LANGUAGES = [
+  { code: "hi", label: "हिन्दी",   name: "Hindi",    flag: "🇮🇳" },
+  { code: "ta", label: "தமிழ்",    name: "Tamil",    flag: "🇮🇳" },
+  { code: "te", label: "తెలుగు",   name: "Telugu",   flag: "🇮🇳" },
+  { code: "mr", label: "मराठी",    name: "Marathi",  flag: "🇮🇳" },
+  { code: "kn", label: "ಕನ್ನಡ",    name: "Kannada",  flag: "🇮🇳" },
+  { code: "gu", label: "ગુજરાતી",  name: "Gujarati", flag: "🇮🇳" },
+  { code: "bn", label: "বাংলা",    name: "Bengali",  flag: "🇮🇳" },
+  { code: "pa", label: "ਪੰਜਾਬੀ",  name: "Punjabi",  flag: "🇮🇳" },
+  { code: "en", label: "English", name: "English", flag: "🇬🇧" },
+];
+
+const LANG_BCP47 = {
+  hi:"hi-IN", ta:"ta-IN", te:"te-IN", mr:"mr-IN",
+  kn:"kn-IN", gu:"gu-IN", bn:"bn-IN", pa:"pa-IN", en: "en-IN",
+};
+
+const RISK_CFG = {
+  High:   { color:"#EF4444", bg:"rgba(239,68,68,0.12)", border:"rgba(239,68,68,0.4)", dark:"#FCA5A5" },
+  Medium: { color:"#F59E0B", bg:"rgba(245,158,11,0.12)", border:"rgba(245,158,11,0.4)", dark:"#FCD34D" },
+  Low:    { color:"#22C55E", bg:"rgba(34,197,94,0.12)", border:"rgba(34,197,94,0.4)", dark:"#6EE7B7" },
+};
+
+// ── Smart Masking (Layer 1 — runs entirely in browser) -----------------------
+function buildMasker() {
+  const map = {}, cnt = {};
+
+  function mask(text) {
+    let t = text;
+    const STOP = /^(This|The|That|These|Those|Service|Flat|Plot|House|Door|Account|Only|Client|Company|Freelancer|Contractor|Provider|Agreement|Party|Parties|Technologies|Pvt)\b/;
+    const patterns = [
+      { re: /\b(?:GSTIN|PAN|Aadhaar|CIN)\s*[:\-]?\s*[A-Z0-9]{8,}\b/gi,        tag: "ID" },
+      { re: /\b(?:Account|A\/C)\s*(?:No\.?)?\s*:?\s*[\dX]{8,}\b/gi,           tag: "BANK" },
+      { re: /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g,              tag: "EMAIL" },
+      { re: /\b\d{10}\b/g,                                                    tag: "PHONE" },
+      { re: /\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b/g, tag: "DATE" },
+      { re: /\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/g,                         tag: "DATE" },
+      { re: /\b(?:[A-Z][A-Za-z&.]*[ \t]+){1,4}(?:Pvt\.?[ \t]*Ltd\.?|Private[ \t]+Limited|Limited|LLC|Inc\.?|Corp\.?|LLP)(?![A-Za-z])/g, tag: "COMPANY" },
+      { re: /\b(?:Plot|Flat|House|Door)[ \t]*No\.?[ \t]*[\d\-]+(?:,[ \t]*[A-Z][A-Za-z0-9 ]{1,30}){1,3}/g, tag: "ADDRESS" },
+      { re: /\b[A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b/g,                 tag: "NAME" },
+    ];
+    patterns.forEach(({ re, tag }) => {
+      t = t.replace(re, (m) => {
+        if (tag === "NAME" && STOP.test(m)) return m;
+        const ex = Object.entries(map).find(([, v]) => v === m);
+        if (ex) return ex[0];
+        cnt[tag] = (cnt[tag] || 0) + 1;
+        const ph = `[${tag}_${cnt[tag]}]`;
+        map[ph] = m;
+        return ph;
+      });
+    });
+    return t;
+  }
+
+  function rebuild(text) {
+    let r = text || "";
+    Object.entries(map).forEach(([ph, orig]) => { r = r.split(ph).join(orig); });
+    return r;
+  }
+
+  function rebuildObj(obj) {
+    if (!obj) return obj;
+    if (typeof obj === "string") return rebuild(obj);
+    if (Array.isArray(obj))      return obj.map(rebuildObj);
+    if (typeof obj === "object") {
+      const out = {};
+      for (const [k, v] of Object.entries(obj)) out[k] = rebuildObj(v);
+      return out;
+    }
+    return obj;
+  }
+
+  return { mask, rebuild, rebuildObj, getMap: () => ({ ...map }) };
+}
+
+// ── Voice (TTS) --------------------------------------------------------------
+function speak(text, langCode) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utt   = new SpeechSynthesisUtterance(text.substring(0, 500));
+  utt.lang    = LANG_BCP47[langCode] || "hi-IN";
+  utt.rate    = 0.88;
+  utt.pitch   = 1;
+  const voices = window.speechSynthesis.getVoices();
+  const match  = voices.find(v => v.lang.startsWith(utt.lang.split("-")[0]));
+  if (match) utt.voice = match;
+  window.speechSynthesis.speak(utt);
+}
+const stopSpeak = () => window.speechSynthesis?.cancel();
+
+// ── Backend calls ------------------------------------------------------------
+async function apiFetch(path, options = {}) {
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: { ...HEADERS, ...options.headers },
+    });
+  } catch {
+    throw new Error(
+      `Cannot reach the server (${API_BASE}). If the backend is on Render's free plan it may be waking up - wait about a minute and try again.`
+    );
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(err.detail || "Request failed");
+  }
+  return res;
+}
+
+async function analyzeContract(maskedText, language) {
+  const form = new FormData();
+  form.append("file", new Blob([maskedText], { type: "text/plain" }), "contract.txt");
+  form.append("language", language);
+  const res = await apiFetch("/analyze", { method: "POST", body: form });
+  return res.json();
+}
+
+async function chatQuestion(question, context, language) {
+  const res = await apiFetch("/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, context, language }),
+  });
+  const d = await res.json();
+  return d.answer;
+}
+
+async function fetchPDF(analysis, language) {
+  const res = await apiFetch("/generate-pdf", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      summary:      analysis.summary,
+      legalOpinion: analysis.legalOpinion || "",
+      clauses:      analysis.clauses,
+      recommendations: analysis.recommendations || [],
+      redFlags:     analysis.redFlags || [],
+      language,
+      overallRisk:  analysis.overallRisk,
+      keyParties:   analysis.keyParties || "",
+    }),
+  });
+  const blob = await res.blob();
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url; a.download = "legal-ease-report.pdf"; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Sample contract ----------------------------------------------------------
+const SAMPLE = `SERVICE AGREEMENT
+
+This Service Agreement ("Agreement") is entered into on January 15, 2024, between
+Rajesh Kumar, residing at Plot No. 45, Sector 18, Noida, Uttar Pradesh ("Client")
+and TechSolutions Pvt. Ltd., CIN U72900DL2018PTC123456, GSTIN 07AAACT1234F1Z5 ("Service Provider").
+
+1. SERVICES
+Service Provider shall provide software development services as described in Annexure A.
+Scope of work may be modified unilaterally by Service Provider at any time without notice.
+
+2. PAYMENT TERMS
+Client shall pay Rs.50,000 per month, due within 3 days of invoice.
+Late payment attracts interest at 36% per annum compounded monthly.
+Service Provider may revise fees by up to 40% annually with 7 days notice.
+All payments are non-refundable under any circumstances.
+
+3. INTELLECTUAL PROPERTY
+All work product, code, designs, and deliverables shall remain the exclusive property of
+Service Provider. Client receives only a non-exclusive, revocable license to use deliverables.
+Service Provider retains the right to reuse all work for other clients.
+
+4. LIMITATION OF LIABILITY
+Service Provider's aggregate liability under this Agreement shall not exceed Rs. 5,000.
+Client shall indemnify and hold harmless Service Provider from ALL losses, damages,
+claims and expenses including unlimited consequential and indirect damages arising from
+any act or omission related to this Agreement.
+
+5. TERMINATION
+Service Provider may terminate this Agreement immediately and without cause.
+Client may terminate only on 180 days written notice AND payment of a termination
+fee equal to 6 months of fees (Rs. 3,00,000), regardless of services delivered.
+
+6. AUTO-RENEWAL
+This Agreement shall automatically renew for successive 2-year terms.
+Client must provide 90 days advance written notice via registered post only
+to prevent renewal. Email notice shall not be valid.
+
+7. NON-COMPETE & NON-SOLICITATION
+Client shall not, directly or indirectly, hire, contract, or engage any employee or
+contractor of Service Provider for a period of 5 years after termination anywhere in India.
+Violation attracts liquidated damages of Rs. 10,00,000 per instance.
+
+8. DATA COLLECTION AND SHARING
+Service Provider may collect Client's business data, customer data, financial information
+and may share or sell such data to third parties for business purposes without further
+consent from Client. Client waives all rights under the IT Act 2000.
+
+9. GOVERNING LAW AND DISPUTE RESOLUTION
+This Agreement shall be governed exclusively by the laws of Singapore.
+All disputes shall be resolved by arbitration seated in London, England under ICC Rules.
+Language of arbitration shall be English only.
+
+10. CONFIDENTIALITY
+Client shall maintain strict confidentiality of all Agreement terms and Service Provider
+processes. Service Provider has no confidentiality obligations whatsoever.
+
+11. FORCE MAJEURE
+Only Service Provider may invoke force majeure to delay or cancel obligations.
+Force majeure does not excuse Client's payment obligations under any circumstances.`;
+
+// ── Donut chart component ----------------------------------------------------
+function DonutChart({ high, medium, low }) {
+  const total = high + medium + low;
+  const risky = high + medium;
+  const cx = 110, cy = 110, r = 72, sw = 26;
+  const circ = 2 * Math.PI * r;
+
+  const segs = [
+    { count: low,    color: "#22C55E", label: "Low Risk" },
+    { count: medium, color: "#F59E0B", label: "Medium Risk" },
+    { count: high,   color: "#EF4444", label: "High Risk" },
+  ];
+  let cum = 0;
+  const arcs = segs.map(seg => {
+    const dash = total > 0 ? (seg.count / total) * circ : 0;
+    const o = cum; cum += dash;
+    return { ...seg, dash, gap: circ - dash, o };
+  });
+
+  return (
+    <div style={{ background:"#0F2A20", borderRadius:"18px", border:"1px solid rgba(212,175,55,0.25)",
+      padding:"1.5rem", boxShadow:"0 4px 16px rgba(0,0,0,0.08)",
+      display:"flex", flexDirection:"column", alignItems:"center" }}>
+      <div style={{ fontWeight:"700", fontSize:"17px", color:"#F5F0DF",
+        alignSelf:"flex-start", marginBottom:"1.25rem" }}>Risk Distribution</div>
+
+      <svg width="220" height="220" viewBox="0 0 220 220">
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.10)" strokeWidth={sw} />
+        {total > 0
+          ? arcs.map((arc,i) => arc.dash > 2 && (
+            <circle key={i} cx={cx} cy={cy} r={r} fill="none"
+              stroke={arc.color} strokeWidth={sw}
+              strokeDasharray={`${arc.dash-5} ${arc.gap+5}`}
+              strokeDashoffset={-arc.o} strokeLinecap="round"
+              transform={`rotate(-90 ${cx} ${cy})`}
+              style={{ transition:"all 0.7s cubic-bezier(0.4,0,0.2,1)" }} />
+          ))
+          : <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(212,175,55,0.25)" strokeWidth={sw} />
+        }
+        <text x={cx} y={cy-6} textAnchor="middle" fontSize="38" fontWeight="900" fill="#F5F0DF">{risky}</text>
+        <text x={cx} y={cy+16} textAnchor="middle" fontSize="10.5" fill="#9FB0A6" fontWeight="600" letterSpacing="0.8">
+          RISKY CLAUSES FOUND
+        </text>
+      </svg>
+
+      <div style={{ display:"flex", flexWrap:"wrap", justifyContent:"center", gap:"8px 16px", margin:"4px 0 1.25rem" }}>
+        {segs.map(s => (
+          <span key={s.label} style={{ display:"flex", alignItems:"center", gap:"6px", fontSize:"13px", color:"#E2E8E3", fontWeight:"500" }}>
+            <span style={{ width:"11px", height:"11px", borderRadius:"3px", background:s.color, display:"inline-block" }} />
+            {s.label}
+          </span>
+        ))}
+      </div>
+
+      <div style={{ display:"flex", width:"100%", justifyContent:"space-around",
+        paddingTop:"0.875rem", borderTop:"1px solid rgba(255,255,255,0.08)" }}>
+        {segs.map(s => (
+          <div key={s.label} style={{ textAlign:"center" }}>
+            <div style={{ fontSize:"24px", fontWeight:"900", color:s.color, lineHeight:1 }}>{s.count}</div>
+            <div style={{ fontSize:"11px", color:"#9FB0A6", marginTop:"4px" }}>{s.label.split(" ")[0]}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop:"1rem", width:"100%", padding:"10px 14px", borderRadius:"10px",
+        textAlign:"center", boxSizing:"border-box",
+        background: high>0?"rgba(239,68,68,0.12)": medium>0?"rgba(245,158,11,0.12)":"rgba(34,197,94,0.12)",
+        border:`1px solid ${high>0?"rgba(239,68,68,0.4)":medium>0?"rgba(245,158,11,0.4)":"rgba(34,197,94,0.4)"}`,
+        fontSize:"13px", fontWeight:"700",
+        color: high>0?"#DC2626":medium>0?"#D97706":"#059669" }}>
+        {high>0
+          ? `🚨 ${high} High Risk Clause${high>1?"s":""} — Seek Legal Advice`
+          : medium>0
+          ? `⚠️ ${medium} Medium Risk — Review Before Signing`
+          : "✅ Contract Appears Generally Safe"}
+      </div>
+    </div>
+  );
+}
+
+// ── Main App -----------------------------------------------------------------
+export default function LegalEase() {
+  const [screen,          setScreen]          = useState("landing");
+  const [contractText,    setContractText]    = useState("");
+  const [language,        setLanguage]        = useState("hi");
+  const [analysis,        setAnalysis]        = useState(null);
+  const [masker,          setMasker]          = useState(null);
+  const [maskedPreview,   setMaskedPreview]   = useState("");
+  const [piiCount,        setPiiCount]        = useState(0);
+  const [error,           setError]           = useState("");
+  const [filterRisk,      setFilterRisk]      = useState("All");
+  const [activeTab,       setActiveTab]       = useState("opinion");
+  const [chatMessages,    setChatMessages]    = useState([]);
+  const [chatInput,       setChatInput]       = useState("");
+  const [chatLoading,     setChatLoading]     = useState(false);
+  const [expandedClause,  setExpandedClause]  = useState(null);
+  const [dragOver,        setDragOver]        = useState(false);
+  const [speaking,        setSpeaking]        = useState(false);
+  const [pdfLoading,      setPdfLoading]      = useState(false);
+  const fileRef = useRef(null);
+
+  // Preload voices
+  useEffect(() => { window.speechSynthesis?.getVoices(); }, []);
+
+  const selectedLang = LANGUAGES.find(l => l.code === language);
+
+  // ── File handler -----------------------------------------------------------
+  const handleFile = useCallback(async (file) => {
+  if (!file) return;
+
+  const fileName = file.name.toLowerCase();
+
+  try {
+    let extractedText = "";
+
+    if (fileName.endsWith(".txt")) {
+      extractedText = await file.text();
+    } 
+    else if (fileName.endsWith(".pdf")) {
+      const pdfjsLib = await import("pdfjs-dist");
+
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+
+      const pdf = await pdfjsLib.getDocument({
+        data: await file.arrayBuffer()
+      }).promise;
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+
+        extractedText += content.items
+          .map(item => item.str)
+          .join(" ") + "\n";
+      }
+    } 
+    else {
+      alert("Please upload a PDF or TXT file.");
+      return;
+    }
+
+    if (!extractedText.trim()) {
+      alert("No readable text found in this file.");
+      return;
+    }
+
+    setContractText(extractedText);
+    setScreen("language");
+
+  } catch (error) {
+    console.error(error);
+    alert("File could not be read. Please try another file.");
+  }
+}, []);
+  
+  const handleDrop = useCallback((e) => {
+    e.preventDefault(); setDragOver(false);
+    const f = e.dataTransfer.files[0]; if (f) handleFile(f);
+  }, [handleFile]);
+
+  // ── Analyze ---------------------------------------------------------------
+  const handleAnalyze = async () => {
+    if (!contractText.trim()) return;
+    setError(""); setScreen("analyzing");
+    try {
+      const m = buildMasker();
+      const masked = m.mask(contractText);
+      setMasker(m);
+      setMaskedPreview(masked.substring(0, 350) + "…");
+      setPiiCount(Object.keys(m.getMap()).length);
+
+      // Send ONLY masked text to backend
+      const result = await analyzeContract(masked, language);
+
+      // Reconstruct PII back into all text fields
+      const out = m.rebuildObj(result);
+      setAnalysis(out);
+      setScreen("dashboard");
+    } catch (err) {
+      setError(err.message);
+      setScreen("upload");
+    }
+  };
+
+  // ── Chat ------------------------------------------------------------------
+  const handleChat = async () => {
+    if (!chatInput.trim() || chatLoading) return;
+    const q = chatInput; setChatInput("");
+    setChatMessages(p => [...p, { role:"user", text:q }]);
+    setChatLoading(true);
+    try {
+      const ans = await chatQuestion(
+        q,
+        { summary: analysis.summary, legalOpinion: analysis.legalOpinion,
+          clauses: analysis.clauses, overallRisk: analysis.overallRisk },
+        language
+      );
+      setChatMessages(p => [...p, { role:"ai", text:ans }]);
+      speak(ans, language); setSpeaking(true);
+    } catch {
+      setChatMessages(p => [...p, { role:"ai", text:"Error occurred. Please retry." }]);
+    }
+    setChatLoading(false);
+  };
+
+  // ── Voice -----------------------------------------------------------------
+  const toggleSpeak = (text) => {
+    if (speaking) { stopSpeak(); setSpeaking(false); }
+    else { speak(text, language); setSpeaking(true); }
+  };
+
+  // ── PDF ------------------------------------------------------------------
+  const handlePDF = async () => {
+    if (!analysis) return;
+    setPdfLoading(true);
+    try { await fetchPDF(analysis, language); }
+    catch (e) { alert("PDF error: " + e.message); }
+    setPdfLoading(false);
+  };
+
+  const filteredClauses = analysis?.clauses?.filter(
+    c => filterRisk === "All" || c.risk === filterRisk
+  ) || [];
+
+  const riskCounts = analysis ? {
+    High:   analysis.clauses.filter(c => c.risk === "High").length,
+    Medium: analysis.clauses.filter(c => c.risk === "Medium").length,
+    Low:    analysis.clauses.filter(c => c.risk === "Low").length,
+  } : { High:0, Medium:0, Low:0 };
+
+  // ── Shared style helpers --------------------------------------------------
+  
+const S = {
+  app: {
+    fontFamily: "'Segoe UI','Noto Sans Devanagari','Noto Sans Tamil','Noto Sans Telugu',system-ui,sans-serif",
+    minHeight: "100vh",
+    background: "linear-gradient(135deg,#071C16 0%,#0B2B20 50%,#10251D 100%)",
+    color: "#F5F0DF"
+  },
+
+  nav: {
+    background: "rgba(5,24,18,0.96)",
+    backdropFilter: "blur(12px)",
+    borderBottom: "1px solid rgba(212,175,55,0.3)",
+    padding: "8px clamp(1rem, 4vw, 2rem)",
+    gap: "12px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    minHeight: "64px",
+    position: "sticky",
+    top: 0,
+    zIndex: 100
+  },
+
+  logo: {
+    fontWeight: "80
