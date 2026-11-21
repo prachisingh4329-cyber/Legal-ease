@@ -331,12 +331,55 @@ export default function LegalEase() {
   const selectedLang = LANGUAGES.find(l => l.code === language);
 
   // ── File handler -----------------------------------------------------------
-  const handleFile = useCallback((file) => {
-    const reader = new FileReader();
-    reader.onload = e => { setContractText(e.target.result); setScreen("language"); };
-    reader.readAsText(file);
-  }, []);
+  const handleFile = useCallback(async (file) => {
+  if (!file) return;
 
+  const fileName = file.name.toLowerCase();
+
+  try {
+    let extractedText = "";
+
+    if (fileName.endsWith(".txt")) {
+      extractedText = await file.text();
+    } 
+    else if (fileName.endsWith(".pdf")) {
+      const pdfjsLib = await import("pdfjs-dist");
+
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+
+      const pdf = await pdfjsLib.getDocument({
+        data: await file.arrayBuffer()
+      }).promise;
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+
+        extractedText += content.items
+          .map(item => item.str)
+          .join(" ") + "\n";
+      }
+    } 
+    else {
+      alert("Please upload a PDF or TXT file.");
+      return;
+    }
+
+    if (!extractedText.trim()) {
+      alert("No readable text found in this file.");
+      return;
+    }
+
+    setContractText(extractedText);
+    setScreen("language");
+
+  } catch (error) {
+    console.error(error);
+    alert("File could not be read. Please try another file.");
+  }
+}, []);
+  
   const handleDrop = useCallback((e) => {
     e.preventDefault(); setDragOver(false);
     const f = e.dataTransfer.files[0]; if (f) handleFile(f);
