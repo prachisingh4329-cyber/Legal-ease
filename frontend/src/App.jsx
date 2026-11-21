@@ -457,31 +457,95 @@ export default function LegalEase() {
 
   // ── Shared style helpers --------------------------------------------------
   const S = {
-    app:   { fontFamily:"'Segoe UI','Noto Sans Devanagari','Noto Sans Tamil','Noto Sans Telugu',system-ui,sans-serif",
-             minHeight:"100vh", background:"linear-gradient(135deg,#EEF2FF 0%,#F0FDF4 50%,#FFF7ED 100%)", color:"#111827" },
-    nav:   { background:"rgba(255,255,255,0.95)", backdropFilter:"blur(12px)",
-             borderBottom:"1px solid #E5E7EB", padding:"0 2rem",
-             display:"flex", alignItems:"center", justifyContent:"space-between",
-             height:"64px", position:"sticky", top:0, zIndex:100 },
-    logo:  { fontWeight:"800", fontSize:"22px",
-             background:"linear-gradient(135deg,#1D4ED8,#059669)",
-             WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", cursor:"pointer" },
-    card:  { background:"white", borderRadius:"16px", border:"1px solid #E5E7EB",
-             padding:"1.5rem", boxShadow:"0 1px 4px rgba(0,0,0,0.06)" },
-    badge: c => ({ display:"inline-flex", alignItems:"center", gap:"4px",
-                   background:c+"18", color:c, border:`1px solid ${c}40`,
-                   borderRadius:"20px", padding:"3px 10px", fontSize:"12px", fontWeight:"600" }),
-    btn: (v="primary") => ({
-      padding:"11px 22px", borderRadius:"10px", border:"none", fontWeight:"700",
-      fontSize:"14px", cursor:"pointer", transition:"all 0.2s",
-      display:"inline-flex", alignItems:"center", gap:"8px",
-      ...(v==="primary" ? { background:"linear-gradient(135deg,#1D4ED8,#1E40AF)", color:"white", boxShadow:"0 4px 14px rgba(29,78,216,0.3)" }
-        : v==="green"   ? { background:"linear-gradient(135deg,#059669,#047857)", color:"white", boxShadow:"0 4px 14px rgba(5,150,105,0.3)" }
-        : v==="danger"  ? { background:"#EF4444", color:"white" }
-        : v==="voice"   ? { background:"#F0FDF4", color:"#059669", border:"1px solid #A7F3D0" }
-        : { background:"white", color:"#374151", border:"1px solid #D1D5DB" }),
-    }),
-  };
+  app: {
+    fontFamily: "'Segoe UI','Noto Sans Devanagari','Noto Sans Tamil','Noto Sans Telugu',system-ui,sans-serif",
+    minHeight: "100vh",
+    background: "linear-gradient(135deg,#071C16 0%,#0B2B20 50%,#10251D 100%)",
+    color: "#F5F0DF"
+  },
+
+  nav: {
+    background: "rgba(5,24,18,0.96)",
+    backdropFilter: "blur(12px)",
+    borderBottom: "1px solid rgba(212,175,55,0.3)",
+    padding: "0 2rem",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    height: "64px",
+    position: "sticky",
+    top: 0,
+    zIndex: 100
+  },
+
+  logo: {
+    fontWeight: "800",
+    fontSize: "22px",
+    background: "linear-gradient(135deg,#F5D77A,#C69B35)",
+    WebkitBackgroundClip: "text",
+    WebkitTextFillColor: "transparent",
+    cursor: "pointer"
+  },
+
+  card: {
+    background: "linear-gradient(145deg,#123629,#0D291F)",
+    borderRadius: "16px",
+    border: "1px solid rgba(212,175,55,0.3)",
+    padding: "1.5rem",
+    boxShadow: "0 8px 25px rgba(0,0,0,0.25)"
+  },
+
+  badge: c => ({
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "4px",
+    background: "rgba(212,175,55,0.10)",
+    color: "#E8CA75",
+    border: "1px solid rgba(212,175,55,0.35)",
+    borderRadius: "20px",
+    padding: "3px 10px",
+    fontSize: "12px",
+    fontWeight: "600"
+  }),
+
+  btn: (v="primary") => ({
+    padding: "11px 22px",
+    borderRadius: "10px",
+    border: "none",
+    fontWeight: "700",
+    fontSize: "14px",
+    cursor: "pointer",
+    transition: "all 0.2s",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "8px",
+
+    ...(v==="primary" ? {
+      background: "linear-gradient(135deg,#E8CA75,#B88A25)",
+      color: "#10251D",
+      boxShadow: "0 4px 14px rgba(212,175,55,0.25)"
+    }
+    : v==="green" ? {
+      background: "linear-gradient(135deg,#1C6848,#10432F)",
+      color: "white",
+      border: "1px solid #C69B35"
+    }
+    : v==="danger" ? {
+      background: "#B83B3B",
+      color: "white"
+    }
+    : v==="voice" ? {
+      background: "#123629",
+      color: "#E8CA75",
+      border: "1px solid #C69B35"
+    }
+    : {
+      background: "#123629",
+      color: "#F5F0DF",
+      border: "1px solid rgba(212,175,55,0.4)"
+    })
+  })
+};
 
   // ==========================================================================
   // SCREENS
