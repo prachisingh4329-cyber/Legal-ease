@@ -456,7 +456,8 @@ export default function LegalEase() {
   } : { High:0, Medium:0, Low:0 };
 
   // ── Shared style helpers --------------------------------------------------
-  const S = {
+  
+const S = {
   app: {
     fontFamily: "'Segoe UI','Noto Sans Devanagari','Noto Sans Tamil','Noto Sans Telugu',system-ui,sans-serif",
     minHeight: "100vh",
