@@ -137,7 +137,7 @@ def root():
         "service": "Legal-Ease API",
         "status": "running",
         "gemini_configured": bool(GOOGLE_API_KEY),
-        "gemini_model": GOOGLE_MODEL,
+        "gemini_model": "gemini-3.8-flash",
         "note": "Frontend handles all PII masking. Backend does AI analysis only."
     }
 
